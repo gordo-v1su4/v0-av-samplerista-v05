@@ -138,9 +138,9 @@ export default function WaveformDisplay({
       const audioBuffer = await audioEngine.loadAudioFile(file)
       setBuffer(audioBuffer)
 
-      // Auto-detect sections and slices
+      // Auto-detect sections and slices (now async)
       if (sliceBy === "section") {
-        const detectedSections = audioEngine.detectSections(maxSections)
+        const detectedSections = await audioEngine.detectSections(maxSections)
         setSections(detectedSections)
 
         // Get all slices from all sections
@@ -149,8 +149,8 @@ export default function WaveformDisplay({
 
         onAudioLoad(audioBuffer, allSlices, detectedSections)
       } else {
-        // Legacy transient detection
-        const detectedSlices = audioEngine.detectTransients(sensitivity, 0.05, 16)
+        // Real transient detection (now async)
+        const detectedSlices = await audioEngine.detectTransients(sensitivity, 0.05, 16)
         setSlices(detectedSlices)
         setSections([])
         onAudioLoad(audioBuffer, detectedSlices, [])
@@ -167,12 +167,12 @@ export default function WaveformDisplay({
     }
   }
 
-  const detectSections = useCallback(() => {
+  const detectSections = useCallback(async () => {
     if (!buffer) return
 
     setIsProcessing(true)
     try {
-      const detectedSections = audioEngine.detectSections(maxSections)
+      const detectedSections = await audioEngine.detectSections(maxSections)
 
       // Only update if the sections actually changed
       if (JSON.stringify(detectedSections) !== JSON.stringify(sections)) {
@@ -184,17 +184,19 @@ export default function WaveformDisplay({
 
         onAudioLoad(buffer, allSlices, detectedSections)
       }
+    } catch (error) {
+      console.error('Error detecting sections:', error)
     } finally {
       setIsProcessing(false)
     }
   }, [buffer, maxSections, onAudioLoad, sections])
 
-  const detectTransients = useCallback(() => {
+  const detectTransients = useCallback(async () => {
     if (!buffer) return
 
     setIsProcessing(true)
     try {
-      const detectedSlices = audioEngine.detectTransients(sensitivity, 0.05, 16)
+      const detectedSlices = await audioEngine.detectTransients(sensitivity, 0.05, 16)
 
       // Only update if the slices actually changed
       if (JSON.stringify(detectedSlices) !== JSON.stringify(slices)) {
@@ -202,6 +204,8 @@ export default function WaveformDisplay({
         setSections([])
         onAudioLoad(buffer, detectedSlices, [])
       }
+    } catch (error) {
+      console.error('Error detecting transients:', error)
     } finally {
       setIsProcessing(false)
     }
@@ -216,10 +220,11 @@ export default function WaveformDisplay({
       if (lastProcessedBufferRef.current !== bufferKey) {
         lastProcessedBufferRef.current = bufferKey
 
+        // Handle async detection
         if (sliceBy === "section") {
-          detectSections()
+          detectSections().catch(console.error)
         } else if (sliceBy === "transient") {
-          detectTransients()
+          detectTransients().catch(console.error)
         }
       }
     }
@@ -1199,10 +1204,13 @@ export default function WaveformDisplay({
             />
 
             {isProcessing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
+              <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/90 z-10">
                 <div className="flex flex-col items-center">
                   <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-                  <p className="text-zinc-400 text-sm">Processing audio...</p>
+                  <p className="text-zinc-400 text-sm font-medium">Analyzing audio...</p>
+                  <p className="text-zinc-500 text-xs mt-1">
+                    {sliceBy === "section" ? "Detecting song structure" : "Detecting transients"}
+                  </p>
                 </div>
               </div>
             )}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { AppShell } from "@/components/app-shell"
-import WaveformDisplay from "@/components/waveform-display"
+import WaveformWavesurfer from "@/components/waveform-wavesurfer"
 import { TransportControls } from "@/components/transport-controls"
 import DrumPads from "@/components/drum-pads"
 import VideoDisplay from "@/components/video-display"
@@ -327,7 +327,7 @@ export default function AudioSampler() {
                 <div className="flex flex-col gap-4 w-full lg:w-2/3">
                   <div className="flex flex-col gap-2">
                     <h2 className="text-xl font-bold text-zinc-100">Audio Waveform</h2>
-                    <WaveformDisplay
+                    <WaveformWavesurfer
                       onAudioLoad={handleAudioLoad}
                       onPlaybackPositionChange={handlePlaybackPositionChange}
                       onCurrentSliceChange={handleCurrentSliceChange}
