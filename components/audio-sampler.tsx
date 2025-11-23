@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useRef } from "react"
 import { AppShell } from "@/components/app-shell"
-import WaveformWavesurfer from "@/components/waveform-wavesurfer"
-import { TransportControls } from "@/components/transport-controls"
+import WaveformDisplay from "@/components/waveform-display"
 import DrumPads from "@/components/drum-pads"
 import VideoDisplay from "@/components/video-display"
 import Sequencer from "@/components/sequencer"
 import EffectsPanel from "@/components/effects-panel"
 import MasterControls from "@/components/master-controls"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AudioWaveform as Waveform, Video, Music, Sliders } from 'lucide-react'
+import { AudioWaveform as Waveform, Video, Music, Sliders } from "lucide-react"
 import { audioEngine, type AudioSlice, type AudioSection } from "@/lib/audio-engine"
 import { mediaLibrary } from "@/lib/media-library"
 
@@ -19,14 +18,14 @@ export default function AudioSampler() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLooping, setIsLooping] = useState(false)
-  const [currentSlice, setCurrentSlice] = useState<number | null>(null)
+  const [currentSlice, setCurrentSlice] = useState<string | null>(null)
   const [currentSection, setCurrentSection] = useState<number | null>(null)
   const [currentAnnotation, setCurrentAnnotation] = useState<string | null>(null)
   const [slices, setSlices] = useState<AudioSlice[]>([])
   const [sections, setSections] = useState<AudioSection[]>([])
   const [bpm, setBpm] = useState(120)
   const [masterVolume, setMasterVolume] = useState(80)
-  const [activePad, setActivePad] = useState<number | null>(null)
+  const [activePad, setActivePad] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("audio")
   const [currentPlaybackId, setCurrentPlaybackId] = useState<string | null>(null)
   const [loopStart, setLoopStart] = useState(0)
@@ -79,40 +78,7 @@ export default function AudioSampler() {
   }
 
   const togglePlayback = () => {
-    if (isPlaying) {
-      // Stop playback
-      if (currentPlaybackId) {
-        audioEngine.stopPlayback(currentPlaybackId)
-        setCurrentPlaybackId(null)
-      }
-      setIsPlaying(false)
-    } else {
-      // Start playback
-      if (audioBuffer) {
-        // Calculate playback rate based on BPM (120 BPM is the base rate)
-        const playbackRate = bpm / 120
-
-        const options: any = {
-          loop: isLooping,
-          volume: masterVolume / 100,
-          rate: playbackRate,
-        }
-
-        if (isLooping) {
-          options.loopStart = loopStart * audioBuffer.duration
-          options.loopEnd = loopEnd * audioBuffer.duration
-        }
-
-        // Start from current playback position
-        const startPosition = playbackPosition * audioBuffer.duration
-        const playbackId = audioEngine.playBufferFromPosition(startPosition, options)
-
-        if (playbackId) {
-          setCurrentPlaybackId(playbackId)
-          setIsPlaying(true)
-        }
-      }
-    }
+    setIsPlaying(!isPlaying)
   }
 
   const stopPlayback = () => {
@@ -127,7 +93,7 @@ export default function AudioSampler() {
     setIsLooping(!isLooping)
   }
 
-  const handlePadClick = (index: number) => {
+  const handlePadClick = (index: string) => {
     setActivePad(index)
 
     // Find the slice with this index
@@ -143,25 +109,10 @@ export default function AudioSampler() {
         setCurrentMediaId(media.id)
       }
 
-      // If currently playing, seek to this position
-      if (isPlaying && currentPlaybackId) {
+      // Stop current playback to sync position
+      if (currentPlaybackId) {
         audioEngine.stopPlayback(currentPlaybackId)
-
-        const options: any = {
-          loop: isLooping,
-          volume: masterVolume / 100,
-          rate: bpm / 120,
-        }
-
-        if (isLooping) {
-          options.loopStart = loopStart * audioBuffer.duration
-          options.loopEnd = loopEnd * audioBuffer.duration
-        }
-
-        const newPlaybackId = audioEngine.playBufferFromPosition(newPosition * audioBuffer.duration, options)
-        if (newPlaybackId) {
-          setCurrentPlaybackId(newPlaybackId)
-        }
+        setCurrentPlaybackId(null)
       }
     }
   }
@@ -170,8 +121,8 @@ export default function AudioSampler() {
     // Implementation for skip forward
     // For example, skip to the next slice
     if (currentSlice !== null && slices.length > 0) {
-      const nextSlice = (currentSlice + 1) % slices.length
-      handlePadClick(nextSlice)
+      const nextSlice = (Number.parseInt(currentSlice) + 1) % slices.length
+      handlePadClick(nextSlice.toString())
     }
   }
 
@@ -179,8 +130,8 @@ export default function AudioSampler() {
     // Implementation for skip back
     // For example, skip to the previous slice
     if (currentSlice !== null && slices.length > 0) {
-      const prevSlice = (currentSlice - 1 + slices.length) % slices.length
-      handlePadClick(prevSlice)
+      const prevSlice = (Number.parseInt(currentSlice) - 1 + slices.length) % slices.length
+      handlePadClick(prevSlice.toString())
     }
   }
 
@@ -236,7 +187,7 @@ export default function AudioSampler() {
     setPlaybackPosition(position)
   }
 
-  const handleCurrentSliceChange = (sliceId: number | null) => {
+  const handleCurrentSliceChange = (sliceId: string | null) => {
     setCurrentSlice(sliceId)
     if (sliceId !== null) {
       setActivePad(sliceId)
@@ -256,16 +207,15 @@ export default function AudioSampler() {
   }, [bpm])
 
   useEffect(() => {
-    if (isPlaying && currentPlaybackId && audioBuffer) {
-      // Stop current playback
-      audioEngine.stopPlayback(currentPlaybackId)
+    console.log("[v0] Playback effect - isPlaying:", isPlaying, "playbackPosition:", playbackPosition)
 
-      // Restart with new BPM from current position
-      const playbackRate = bpm / 120
+    if (!audioBuffer) return
+
+    if (isPlaying && !currentPlaybackId) {
       const options: any = {
         loop: isLooping,
         volume: masterVolume / 100,
-        rate: playbackRate,
+        rate: bpm / 120,
       }
 
       if (isLooping) {
@@ -273,16 +223,17 @@ export default function AudioSampler() {
         options.loopEnd = loopEnd * audioBuffer.duration
       }
 
-      // Continue from current position
-      const startPosition = playbackPosition * audioBuffer.duration
-      const newPlaybackId = audioEngine.playBufferFromPosition(startPosition, options)
-
+      const newPlaybackId = audioEngine.playBufferFromPosition(playbackPosition * audioBuffer.duration, options)
       if (newPlaybackId) {
         setCurrentPlaybackId(newPlaybackId)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bpm])
+
+    if (!isPlaying && currentPlaybackId) {
+      audioEngine.stopPlayback(currentPlaybackId)
+      setCurrentPlaybackId(null)
+    }
+  }, [isPlaying, playbackPosition, currentPlaybackId, audioBuffer, isLooping, loopStart, loopEnd, masterVolume, bpm])
 
   return (
     <AppShell>
@@ -327,7 +278,7 @@ export default function AudioSampler() {
                 <div className="flex flex-col gap-4 w-full lg:w-2/3">
                   <div className="flex flex-col gap-2">
                     <h2 className="text-xl font-bold text-zinc-100">Audio Waveform</h2>
-                    <WaveformWavesurfer
+                    <WaveformDisplay
                       onAudioLoad={handleAudioLoad}
                       onPlaybackPositionChange={handlePlaybackPositionChange}
                       onCurrentSliceChange={handleCurrentSliceChange}
@@ -347,9 +298,7 @@ export default function AudioSampler() {
                     <div className="mt-2">
                       <h3 className="text-sm font-semibold text-zinc-300 mb-2">Annotations</h3>
                       <div className="p-3 border border-zinc-800 rounded-md bg-zinc-900/50 min-h-[60px] flex items-center justify-center">
-                        <p className="text-xs text-zinc-500">
-                          Annotations will appear here when created from sections
-                        </p>
+                        <p className="text-xs text-zinc-500">Annotations will appear here when created from sections</p>
                       </div>
                     </div>
                   </div>

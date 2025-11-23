@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Slider } from "@/components/ui/slider"
 import { Button } from "@/components/ui/button"
-import { Play, Pause, SkipBack, Upload, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Wand2, Repeat } from 'lucide-react'
+import { Play, Pause, SkipBack, Upload, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Wand2, Repeat } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { audioEngine, type AudioSlice, type AudioSection } from "@/lib/audio-engine"
@@ -138,9 +138,9 @@ export default function WaveformDisplay({
       const audioBuffer = await audioEngine.loadAudioFile(file)
       setBuffer(audioBuffer)
 
-      // Auto-detect sections and slices (now async)
+      // Auto-detect sections and slices
       if (sliceBy === "section") {
-        const detectedSections = await audioEngine.detectSections(maxSections)
+        const detectedSections = audioEngine.detectSections(maxSections)
         setSections(detectedSections)
 
         // Get all slices from all sections
@@ -149,8 +149,8 @@ export default function WaveformDisplay({
 
         onAudioLoad(audioBuffer, allSlices, detectedSections)
       } else {
-        // Real transient detection (now async)
-        const detectedSlices = await audioEngine.detectTransients(sensitivity, 0.05, 16)
+        // Legacy transient detection
+        const detectedSlices = audioEngine.detectTransients(sensitivity, 0.05, 16)
         setSlices(detectedSlices)
         setSections([])
         onAudioLoad(audioBuffer, detectedSlices, [])
@@ -167,12 +167,12 @@ export default function WaveformDisplay({
     }
   }
 
-  const detectSections = useCallback(async () => {
+  const detectSections = useCallback(() => {
     if (!buffer) return
 
     setIsProcessing(true)
     try {
-      const detectedSections = await audioEngine.detectSections(maxSections)
+      const detectedSections = audioEngine.detectSections(maxSections)
 
       // Only update if the sections actually changed
       if (JSON.stringify(detectedSections) !== JSON.stringify(sections)) {
@@ -184,19 +184,17 @@ export default function WaveformDisplay({
 
         onAudioLoad(buffer, allSlices, detectedSections)
       }
-    } catch (error) {
-      console.error('Error detecting sections:', error)
     } finally {
       setIsProcessing(false)
     }
   }, [buffer, maxSections, onAudioLoad, sections])
 
-  const detectTransients = useCallback(async () => {
+  const detectTransients = useCallback(() => {
     if (!buffer) return
 
     setIsProcessing(true)
     try {
-      const detectedSlices = await audioEngine.detectTransients(sensitivity, 0.05, 16)
+      const detectedSlices = audioEngine.detectTransients(sensitivity, 0.05, 16)
 
       // Only update if the slices actually changed
       if (JSON.stringify(detectedSlices) !== JSON.stringify(slices)) {
@@ -204,8 +202,6 @@ export default function WaveformDisplay({
         setSections([])
         onAudioLoad(buffer, detectedSlices, [])
       }
-    } catch (error) {
-      console.error('Error detecting transients:', error)
     } finally {
       setIsProcessing(false)
     }
@@ -220,11 +216,10 @@ export default function WaveformDisplay({
       if (lastProcessedBufferRef.current !== bufferKey) {
         lastProcessedBufferRef.current = bufferKey
 
-        // Handle async detection
         if (sliceBy === "section") {
-          detectSections().catch(console.error)
+          detectSections()
         } else if (sliceBy === "transient") {
-          detectTransients().catch(console.error)
+          detectTransients()
         }
       }
     }
@@ -341,10 +336,10 @@ export default function WaveformDisplay({
     // Draw playhead
     const playheadX = ((playbackPosition * duration - visibleStartTime) / visibleDuration) * width
     if (playheadX >= 0 && playheadX <= width) {
-      ctx.fillStyle = "#ffffff"
+      ctx.fillStyle = externalIsPlaying ? "#ffffff" : "#a1a1aa" // white when playing, zinc-400 when paused
       ctx.fillRect(playheadX - 1, 0, 2, height)
     }
-  }, [buffer, sections, playbackPosition, formatTime, zoom, scrollPosition])
+  }, [buffer, sections, playbackPosition, formatTime, zoom, scrollPosition, externalIsPlaying])
 
   const startPlaybackAnimation = useCallback(() => {
     if (!buffer || !canvasRef.current) return
@@ -693,23 +688,20 @@ export default function WaveformDisplay({
           ctx.setLineDash([])
         }
 
-        // Draw playhead
-        // Use externalIsPlaying state to determine if playhead should be drawn
-        if (externalIsPlaying) {
-          const playheadPosition = Math.floor(playbackPosition * canvasWidth)
-          ctx.strokeStyle = "#ffffff"
-          ctx.lineWidth = 2
-          ctx.beginPath()
-          ctx.moveTo(playheadPosition, 0)
-          ctx.lineTo(playheadPosition, canvasHeight)
-          ctx.stroke()
+        // Draw playhead - now always visible, not just during playback
+        const playheadPosition = Math.floor(playbackPosition * canvasWidth)
+        ctx.strokeStyle = externalIsPlaying ? "#ffffff" : "#a1a1aa" // white when playing, zinc-400 when paused
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(playheadPosition, 0)
+        ctx.lineTo(playheadPosition, canvasHeight)
+        ctx.stroke()
 
-          // Draw playhead position indicator
-          ctx.fillStyle = "#ffffff"
-          ctx.beginPath()
-          ctx.arc(playheadPosition, 10, 5, 0, Math.PI * 2)
-          ctx.fill()
-        }
+        // Draw playhead position indicator
+        ctx.fillStyle = externalIsPlaying ? "#ffffff" : "#a1a1aa"
+        ctx.beginPath()
+        ctx.arc(playheadPosition, 10, 5, 0, Math.PI * 2)
+        ctx.fill()
       }
     }
 
@@ -789,7 +781,8 @@ export default function WaveformDisplay({
       externalTogglePlayback()
     } else {
       // Fallback for standalone usage
-      if (externalIsPlaying) { // Check externalIsPlaying for fallback logic
+      if (externalIsPlaying) {
+        // Check externalIsPlaying for fallback logic
         if (currentPlaybackId) {
           audioEngine.stopPlayback(currentPlaybackId)
           setCurrentPlaybackId(null)
@@ -978,28 +971,10 @@ export default function WaveformDisplay({
       onPlaybackPositionChange?.(newPosition)
       onCurrentSectionChange?.(sectionId)
 
-      // If currently playing, seek to this position
-      // Check externalIsPlaying before seeking during playback
-      if (externalIsPlaying && currentPlaybackId) {
+      // Stop current playback to sync position immediately
+      if (currentPlaybackId) {
         audioEngine.stopPlayback(currentPlaybackId)
-
-        const options: any = {
-          loop: isLooping,
-          volume: Math.pow(10, volume / 20),
-          rate: 1.0,
-          // Added pitch shifting option
-          pitch: pitch,
-        }
-
-        if (isLooping) {
-          options.loopStart = loopStart * buffer.duration
-          options.loopEnd = loopEnd * buffer.duration
-        }
-
-        const newPlaybackId = audioEngine.playBufferFromPosition(newPosition * buffer.duration, options)
-        if (newPlaybackId) {
-          setCurrentPlaybackId(newPlaybackId)
-        }
+        setCurrentPlaybackId(null)
       }
     }
   }
@@ -1015,28 +990,10 @@ export default function WaveformDisplay({
       onPlaybackPositionChange?.(newPosition)
       onCurrentAnnotationChange?.(annotationId)
 
-      // If currently playing, seek to this position
-      // Check externalIsPlaying before seeking during playback
-      if (externalIsPlaying && currentPlaybackId) {
+      // Stop current playback to sync position immediately
+      if (currentPlaybackId) {
         audioEngine.stopPlayback(currentPlaybackId)
-
-        const options: any = {
-          loop: isLooping,
-          volume: Math.pow(10, volume / 20),
-          rate: 1.0,
-          // Added pitch shifting option
-          pitch: pitch,
-        }
-
-        if (isLooping) {
-          options.loopStart = loopStart * buffer.duration
-          options.loopEnd = loopEnd * buffer.duration
-        }
-
-        const newPlaybackId = audioEngine.playBufferFromPosition(newPosition * buffer.duration, options)
-        if (newPlaybackId) {
-          setCurrentPlaybackId(newPlaybackId)
-        }
+        setCurrentPlaybackId(null)
       }
     }
   }
@@ -1204,13 +1161,10 @@ export default function WaveformDisplay({
             />
 
             {isProcessing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/90 z-10">
+              <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80">
                 <div className="flex flex-col items-center">
                   <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-                  <p className="text-zinc-400 text-sm font-medium">Analyzing audio...</p>
-                  <p className="text-zinc-500 text-xs mt-1">
-                    {sliceBy === "section" ? "Detecting song structure" : "Detecting transients"}
-                  </p>
+                  <p className="text-zinc-400 text-sm">Processing audio...</p>
                 </div>
               </div>
             )}

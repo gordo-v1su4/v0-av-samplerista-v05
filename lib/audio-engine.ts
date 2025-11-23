@@ -2,8 +2,6 @@
  * Audio Engine - Handles Web Audio API functionality for the sampler
  */
 
-import { audioAnalysisService } from './audio-analysis'
-
 export interface AudioSlice {
   id: number
   startSample: number
@@ -583,72 +581,18 @@ class AudioEngine {
     this.currentGainNode = null
   }
 
-  // Detect transients in the audio buffer using Essentia.js
-  async detectTransients(
-    sensitivity = 0.1,
-    minDistance = 0.05,
-    maxSlices = 16,
-    onProgress?: (progress: number) => void
-  ): Promise<AudioSlice[]> {
+  // Detect transients in the audio buffer
+  detectTransients(sensitivity = 0.1, minDistance = 0.05, maxSlices = 16): AudioSlice[] {
     if (!this.buffer) return []
 
-    try {
-      // Initialize analysis service if needed
-      await audioAnalysisService.initialize()
-
-      // Use real onset detection
-      const onsetResult = await audioAnalysisService.detectOnsets(this.buffer, {
-        sensitivity: Math.max(0.1, Math.min(1.0, sensitivity * 10)), // Scale sensitivity
-        minDistance,
-        onProgress,
-      })
-
-      // Convert onsets to slices
-      const slices: AudioSlice[] = []
-      const bufferLength = this.buffer.length
-
-      // Create slices from detected onsets
-      for (let i = 0; i < onsetResult.timestamps.length && slices.length < maxSlices; i++) {
-        const startSample = onsetResult.timestamps[i]
-        // End sample is either the next onset or the end of the buffer
-        const endSample =
-          i < onsetResult.timestamps.length - 1
-            ? onsetResult.timestamps[i + 1]
-            : bufferLength
-
-        slices.push({
-          id: slices.length,
-          startSample,
-          endSample,
-          name: `Slice ${slices.length + 1}`,
-        })
-      }
-
-      // If no onsets detected or too few, fall back to evenly spaced slices
-      if (slices.length < 2) {
-        return this.detectTransientsFallback(sensitivity, minDistance, maxSlices)
-      }
-
-      this.slices = slices
-      return slices
-    } catch (error) {
-      console.warn('Essentia.js onset detection failed, using fallback:', error)
-      return this.detectTransientsFallback(sensitivity, minDistance, maxSlices)
-    }
-  }
-
-  // Fallback method for transient detection (original implementation)
-  private detectTransientsFallback(
-    sensitivity = 0.1,
-    minDistance = 0.05,
-    maxSlices = 16
-  ): AudioSlice[] {
-    if (!this.buffer) return []
-
+    // Simple mock implementation for transient detection
+    // In a real implementation, this would analyze the audio data to find transients
     const slices: AudioSlice[] = []
     const bufferLength = this.buffer.length
+    const sampleRate = this.buffer.sampleRate
+    const minDistanceSamples = Math.floor(minDistance * sampleRate)
 
-    // Create evenly spaced slices as fallback
+    // For demonstration, create evenly spaced slices
     const sliceCount = Math.min(maxSlices, Math.floor(1 / sensitivity))
     const sliceLength = Math.floor(bufferLength / sliceCount)
 
@@ -667,80 +611,8 @@ class AudioEngine {
     return slices
   }
 
-  // Detect sections in the audio buffer using Essentia.js
-  async detectSections(
-    maxSections = 8,
-    onProgress?: (progress: number) => void
-  ): Promise<AudioSection[]> {
-    if (!this.buffer) return []
-
-    try {
-      // Initialize analysis service if needed
-      await audioAnalysisService.initialize()
-
-      // Use real song structure detection
-      const structureResult = await audioAnalysisService.detectSongStructure(this.buffer, {
-        maxSections,
-        minSectionDuration: 5, // Minimum 5 seconds per section
-        onProgress,
-      })
-
-      // Convert boundaries to sections
-      const sections: AudioSection[] = []
-      const buffer = this.buffer
-
-      for (let i = 0; i < structureResult.boundaries.length; i++) {
-        const boundary = structureResult.boundaries[i]
-        const nextBoundary =
-          i < structureResult.boundaries.length - 1
-            ? structureResult.boundaries[i + 1]
-            : { startSample: buffer.length, endSample: buffer.length }
-
-        // Skip very short sections
-        if (boundary.endSample - boundary.startSample < buffer.sampleRate * 0.5) continue
-
-        // Create slices within each section
-        const slicesPerSection = 4
-        const sectionLength = boundary.endSample - boundary.startSample
-        const sliceLength = Math.floor(sectionLength / slicesPerSection)
-        const sectionSlices: AudioSlice[] = []
-
-        for (let j = 0; j < slicesPerSection; j++) {
-          const sliceStartSample = boundary.startSample + j * sliceLength
-          const sliceEndSample =
-            j === slicesPerSection - 1
-              ? boundary.endSample
-              : boundary.startSample + (j + 1) * sliceLength
-          sectionSlices.push({
-            id: i * slicesPerSection + j,
-            startSample: sliceStartSample,
-            endSample: sliceEndSample,
-            name: `${boundary.label.replace(/\s+\d+$/, '')}${i + 1}-${j + 1}`,
-            sectionId: i,
-          })
-        }
-
-        sections.push({
-          id: i,
-          startSample: boundary.startSample,
-          endSample: boundary.endSample,
-          name: boundary.label,
-          slices: sectionSlices,
-        })
-      }
-
-      this.sections = sections
-      // Flatten all slices from all sections
-      this.slices = sections.flatMap((section) => section.slices)
-      return sections
-    } catch (error) {
-      console.warn('Essentia.js structure detection failed, using fallback:', error)
-      return this.detectSectionsFallback(maxSections)
-    }
-  }
-
-  // Fallback method for section detection (original implementation)
-  private detectSectionsFallback(maxSections = 8): AudioSection[] {
+  // Detect sections in the audio buffer (verse, chorus, etc.)
+  detectSections(maxSections = 8): AudioSection[] {
     if (!this.buffer) return []
 
     const buffer = this.buffer
@@ -879,23 +751,6 @@ class AudioEngine {
     // Flatten all slices from all sections
     this.slices = sections.flatMap((section) => section.slices)
     return sections
-  }
-
-  // Detect BPM (tempo) of the audio buffer
-  async detectBPM(): Promise<number> {
-    if (!this.buffer) return 120
-
-    try {
-      // Initialize analysis service if needed
-      await audioAnalysisService.initialize()
-
-      // Use real BPM detection
-      const bpmResult = await audioAnalysisService.detectBPM(this.buffer)
-      return bpmResult.bpm
-    } catch (error) {
-      console.warn('Essentia.js BPM detection failed, using default:', error)
-      return 120 // Default BPM
-    }
   }
 
   // Helper method to calculate energy in a section
