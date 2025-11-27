@@ -966,15 +966,35 @@ export default function WaveformDisplay({
     const section = sections.find((s) => s.id === sectionId)
     if (section) {
       const newPosition = section.startSample / buffer.length
+
+      if (currentPlaybackId) {
+        audioEngine.stopPlayback(currentPlaybackId)
+        setCurrentPlaybackId(null)
+      }
+
+      // Update position
       setPlaybackPosition(newPosition)
       setCurrentSection(sectionId)
       onPlaybackPositionChange?.(newPosition)
       onCurrentSectionChange?.(sectionId)
 
-      // Stop current playback to sync position immediately
-      if (currentPlaybackId) {
-        audioEngine.stopPlayback(currentPlaybackId)
-        setCurrentPlaybackId(null)
+      if (externalIsPlaying) {
+        const options: any = {
+          loop: isLooping,
+          volume: Math.pow(10, volume / 20),
+          rate: 1.0,
+          pitch: pitch,
+        }
+
+        if (isLooping) {
+          options.loopStart = loopStart * buffer.duration
+          options.loopEnd = loopEnd * buffer.duration
+        }
+
+        const newPlaybackId = audioEngine.playBufferFromPosition(newPosition * buffer.duration, options)
+        if (newPlaybackId) {
+          setCurrentPlaybackId(newPlaybackId)
+        }
       }
     }
   }
@@ -985,15 +1005,35 @@ export default function WaveformDisplay({
     const annotation = annotations.find((a) => a.id === annotationId)
     if (annotation) {
       const newPosition = annotation.startTime / buffer.duration
+
+      if (currentPlaybackId) {
+        audioEngine.stopPlayback(currentPlaybackId)
+        setCurrentPlaybackId(null)
+      }
+
+      // Update position
       setPlaybackPosition(newPosition)
       setCurrentAnnotation(annotationId)
       onPlaybackPositionChange?.(newPosition)
       onCurrentAnnotationChange?.(annotationId)
 
-      // Stop current playback to sync position immediately
-      if (currentPlaybackId) {
-        audioEngine.stopPlayback(currentPlaybackId)
-        setCurrentPlaybackId(null)
+      if (externalIsPlaying) {
+        const options: any = {
+          loop: isLooping,
+          volume: Math.pow(10, volume / 20),
+          rate: 1.0,
+          pitch: pitch,
+        }
+
+        if (isLooping) {
+          options.loopStart = loopStart * buffer.duration
+          options.loopEnd = loopEnd * buffer.duration
+        }
+
+        const newPlaybackId = audioEngine.playBufferFromPosition(newPosition * buffer.duration, options)
+        if (newPlaybackId) {
+          setCurrentPlaybackId(newPlaybackId)
+        }
       }
     }
   }

@@ -100,6 +100,13 @@ export default function AudioSampler() {
     const slice = slices.find((s) => s.id === index)
     if (slice && audioBuffer) {
       const newPosition = slice.startSample / audioBuffer.length
+
+      if (currentPlaybackId) {
+        audioEngine.stopPlayback(currentPlaybackId)
+        setCurrentPlaybackId(null)
+      }
+
+      // Update position state
       setPlaybackPosition(newPosition)
       setCurrentSlice(index)
 
@@ -109,10 +116,22 @@ export default function AudioSampler() {
         setCurrentMediaId(media.id)
       }
 
-      // Stop current playback to sync position
-      if (currentPlaybackId) {
-        audioEngine.stopPlayback(currentPlaybackId)
-        setCurrentPlaybackId(null)
+      if (isPlaying) {
+        const options: any = {
+          loop: isLooping,
+          volume: masterVolume / 100,
+          rate: bpm / 120,
+        }
+
+        if (isLooping) {
+          options.loopStart = loopStart * audioBuffer.duration
+          options.loopEnd = loopEnd * audioBuffer.duration
+        }
+
+        const newPlaybackId = audioEngine.playBufferFromPosition(newPosition * audioBuffer.duration, options)
+        if (newPlaybackId) {
+          setCurrentPlaybackId(newPlaybackId)
+        }
       }
     }
   }
@@ -203,10 +222,6 @@ export default function AudioSampler() {
   }
 
   useEffect(() => {
-    bpmRef.current = bpm
-  }, [bpm])
-
-  useEffect(() => {
     console.log("[v0] Playback effect - isPlaying:", isPlaying, "playbackPosition:", playbackPosition)
 
     if (!audioBuffer) return
@@ -233,7 +248,7 @@ export default function AudioSampler() {
       audioEngine.stopPlayback(currentPlaybackId)
       setCurrentPlaybackId(null)
     }
-  }, [isPlaying, playbackPosition, currentPlaybackId, audioBuffer, isLooping, loopStart, loopEnd, masterVolume, bpm])
+  }, [isPlaying, currentPlaybackId, audioBuffer, isLooping, loopStart, loopEnd, masterVolume, bpm])
 
   return (
     <AppShell>
