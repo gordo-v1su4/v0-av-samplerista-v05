@@ -494,6 +494,17 @@ export default function WaveformDisplay({
         const samplesPerPixel = Math.ceil(buffer.length / (canvasWidth * zoom))
         const startSample = Math.floor(scrollPosition * buffer.length)
 
+        console.log(
+          "[v0] Waveform draw - playbackPosition:",
+          playbackPosition,
+          "duration:",
+          buffer.duration,
+          "zoom:",
+          zoom,
+          "scrollPosition:",
+          scrollPosition,
+        )
+
         // Draw left channel
         ctx.fillStyle = "#f97316" // orange-500
         for (let i = 0; i < canvasWidth; i++) {
@@ -688,20 +699,37 @@ export default function WaveformDisplay({
           ctx.setLineDash([])
         }
 
-        // Draw playhead - now always visible, not just during playback
-        const playheadPosition = Math.floor(playbackPosition * canvasWidth)
-        ctx.strokeStyle = externalIsPlaying ? "#ffffff" : "#a1a1aa" // white when playing, zinc-400 when paused
-        ctx.lineWidth = 2
-        ctx.beginPath()
-        ctx.moveTo(playheadPosition, 0)
-        ctx.lineTo(playheadPosition, canvasHeight)
-        ctx.stroke()
+        // Convert playbackPosition (0-1) to sample position
+        const currentSample = playbackPosition * buffer.length
+        // Calculate pixel position relative to current view (accounting for zoom and scroll)
+        const playheadPosition = (currentSample - startSample) / samplesPerPixel
 
-        // Draw playhead position indicator
-        ctx.fillStyle = externalIsPlaying ? "#ffffff" : "#a1a1aa"
-        ctx.beginPath()
-        ctx.arc(playheadPosition, 10, 5, 0, Math.PI * 2)
-        ctx.fill()
+        console.log(
+          "[v0] Playhead - currentSample:",
+          currentSample,
+          "startSample:",
+          startSample,
+          "samplesPerPixel:",
+          samplesPerPixel,
+          "playheadPosition:",
+          playheadPosition,
+        )
+
+        // Only draw playhead if it's within the visible canvas area
+        if (playheadPosition >= 0 && playheadPosition <= canvasWidth) {
+          ctx.strokeStyle = externalIsPlaying ? "#ffffff" : "#a1a1aa" // white when playing, zinc-400 when paused
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(playheadPosition, 0)
+          ctx.lineTo(playheadPosition, canvasHeight)
+          ctx.stroke()
+
+          // Draw playhead position indicator
+          ctx.fillStyle = externalIsPlaying ? "#ffffff" : "#a1a1aa"
+          ctx.beginPath()
+          ctx.arc(playheadPosition, 10, 5, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
     }
 
